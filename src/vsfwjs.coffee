@@ -3,7 +3,7 @@
 # integrating [express](http://expressjs.com), [socket.io](http://socket.io)
 # and other best-of-breed libraries.
 
-vsfw = version: '0.0.6'
+vsfw = version: '0.0.7'
 
 codename = 'You can\'t do that on stage anymore'
 
@@ -146,7 +146,7 @@ vsfw.app = (func,options={}) ->
   else
     io = context.io = socketio.listen(context.server)
 
-  # Reference to the zappa client, the value will be set later.
+  # Reference to the vsfw client, the value will be set later.
   client = null
   client_bundled = null
   client_bundle_simple = null
@@ -521,7 +521,7 @@ vsfw.app = (func,options={}) ->
           copy_data_to ctx.data, [req.query, req.params, req.body]
 
         if app.settings['x-powered-by']
-          res.setHeader 'X-Powered-By', "Zappa #{zappa.version}"
+          res.setHeader 'X-Powered-By', "vsfw #{vsfw.version}"
 
         result = r.handler.call ctx, req, res, next
 
