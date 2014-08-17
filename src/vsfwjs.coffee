@@ -763,3 +763,11 @@ vsfw.adapter = (engine, options = {}) ->
 
 coffeecup_adapter = vsfw.adapter 'coffeecup',
   blacklist: ['format', 'autoescape', 'locals', 'hardcode', 'cache']
+
+
+module.exports = vsfw.run
+module.exports.run = vsfw.run
+module.exports.app = vsfw.app
+module.exports.adapter = vsfw.adapter
+module.exports.version = vsfw.version
+module.exports.vsfw_fs = vsfw_fs
