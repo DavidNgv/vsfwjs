@@ -58,9 +58,7 @@
     "vendor/socket.io.min.js"
   ],
   "scripts": {
-    "pretest": "npm install; cake setup",
-    "test": "cake test",
-    "prepublish": "cake setup"
+    "pretest": "npm install"
   },
   "contributors": [
     {
@@ -71,7 +69,7 @@
   "publishConfig": {
     "tag": "latest"
   },
-  "readme": "vSoft Framework JS",
+  "readme": "vSoft Framework",
   "readmeFilename": "README.md",
   "bugs": {
     "url": "https://github.com/davidngv/vsfwjs/issues"
