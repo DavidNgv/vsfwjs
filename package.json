@@ -1,7 +1,7 @@
 {
   "name": "vsfwjs",
   "description": "vsfwjs",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "author": {
     "name": "David Nguyen",
     "email": "davidngv74@gmail.com"
@@ -74,5 +74,5 @@
   "bugs": {
     "url": "https://github.com/davidngv/vsfwjs/issues"
   },
-  "_id": "vsfwjs@0.0.3"
+  "_id": "vsfwjs@0.0.4"
 }

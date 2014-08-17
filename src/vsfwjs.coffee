@@ -3,7 +3,7 @@
 # integrating [express](http://expressjs.com), [socket.io](http://socket.io)
 # and other best-of-breed libraries.
 
-vsfw = version: '0.0.1'
+vsfw = version: '0.0.4'
 
 codename = 'You can\'t do that on stage anymore'
 
