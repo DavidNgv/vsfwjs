@@ -3,7 +3,7 @@
 # integrating [express](http://expressjs.com), [socket.io](http://socket.io)
 # and other best-of-breed libraries.
 
-vsfw = version: '0.0.7'
+vsfw = version: '0.0.8'
 
 codename = 'You can\'t do that on stage anymore'
 
@@ -12,6 +12,7 @@ fs = require 'fs'
 path = require 'path'
 uuid = require 'node-uuid'
 uglify = require 'uglify-js'
+methods = require 'methods'
 
 vendor = (name) ->
   fs.readFileSync(path.join(__dirname,'..','vendor',name)).toString()
@@ -26,7 +27,6 @@ socketio_key = '__session'
 
 # Soft dependencies:
 jsdom = null
-gzippo = null
 express_partials = null
 coffee_css = null
 
@@ -116,14 +116,22 @@ path.exists = fs.exists = (p,callback) ->
   else
     native_exists.apply fs, native_array arguments...
 
-
 # Express must first be called after we modify the `fs` module.
 express = require 'express'
 socketio = require 'socket.io'
 
 # Takes in a function and builds express/socket.io apps based on the rules
 # contained in it.
-vsfw.app = (func,options={}) ->
+vsfw.app = ->
+  for a in arguments
+    switch typeof a
+      when 'function'
+        func = a
+      when 'object'
+        options = a
+
+  options ?= {}
+
   context = {id: uuid.v4(), vsfw, express}
 
   real_root = path.dirname(module.parent.filename)
@@ -144,7 +152,7 @@ vsfw.app = (func,options={}) ->
   if options.disable_io
     io = null
   else
-    io = context.io = socketio.listen(context.server)
+    io = context.io = socketio.listen context.server, options.io ? {}
 
   # Reference to the vsfw client, the value will be set later.
   client = null
@@ -164,7 +172,7 @@ vsfw.app = (func,options={}) ->
   # Location of vsfw-specific URIs.
   app.set 'vsfw_prefix', '/vsfw'
 
-  for verb in ['get', 'post', 'put', 'del', 'all']
+  for verb in [methods...,'del','all']
     do (verb) ->
       context[verb] = (args...) ->
         arity = args.length
@@ -176,7 +184,16 @@ vsfw.app = (func,options={}) ->
             handler: args[arity-1]
         else
           for k, v of arguments[0]
-            route verb: verb, path: k, handler: v
+            # Apply middleware if value is array
+            if v instanceof Array
+              route
+                verb: verb
+                path: k
+                middleware: flatten v[0...v.length-1]
+                handler: v[v.length-1]
+
+            else
+              route verb: verb, path: k, handler: v
         return
 
   context.client = (obj) ->
@@ -249,10 +266,12 @@ vsfw.app = (func,options={}) ->
   context.view = (obj) ->
     for k, v of obj
       ext = path.extname k
-      vsfw_fs[k] = v
+      p = path.join app.get('views'), k
+      # I'm not even sure this is needed -- Express doesn't ask for it
+      vsfw_fs[p] = v
       if not ext
         ext = '.' + app.get 'view engine'
-        vsfw_fs[k+ext] = v
+        vsfw_fs[p+ext] = v
     return
 
   context.engine = (obj) ->
@@ -273,6 +292,44 @@ vsfw.app = (func,options={}) ->
     app.disable i for i in arguments
     return
 
+  wrap_middleware = (f) ->
+    (req,res,next) ->
+      ctx =
+        app: app
+        settings: app.settings
+        locals: res.locals
+        request: req
+        req: req
+        query: req.query
+        params: req.params
+        body: req.body
+        session: req.session
+        response: res
+        res: res
+        next: next
+
+      apply_helpers ctx
+
+      if app.settings['databag']
+        ctx.data = {}
+        copy_data_to ctx.data, [req.query, req.params, req.body]
+
+      f.call ctx, req, res, next
+
+  context.middleware = (f) ->
+    # If magic middleware is enabled the function will get wrapped
+    # by the caller; do not double-wrap it.
+    if app.settings['magic middleware']
+      f
+    else
+      wrap_middleware f
+
+  use_middleware = (f) ->
+    if app.settings['magic middleware']
+      wrap_middleware f
+    else
+      f
+
   context.use = ->
     vsfw_middleware =
     # Connect `static` middlewate uses fs.stat().
@@ -283,14 +340,6 @@ vsfw.app = (func,options={}) ->
         p = options.path ? path.join(real_root, '/public')
         delete options.path
         express.static(p,options)
-      staticGzip: (options) ->
-        if typeof options is 'string'
-          options = path: options
-        options ?= {}
-        p = options.path ? path.join(real_root, '/public')
-        gzippo ?= require 'gzippo'
-        gzippo.staticGzip(p, options)
-        return
       vsfw: ->
         vsfw_used = yes
         (req, res, next) ->
@@ -309,7 +358,7 @@ vsfw.app = (func,options={}) ->
               else next()
           return
       partials: (maps = {}) ->
-        express_partials ?= require 'zappajs-partials'
+        express_partials ?= require 'zappa-partials'
         partials = express_partials()
         partials.register 'coffee', coffeecup_adapter.render
         for k,v of maps
@@ -323,14 +372,16 @@ vsfw.app = (func,options={}) ->
       if vsfw_middleware[name]
         app.use vsfw_middleware[name](arg)
       else if typeof express[name] is 'function'
-        app.use express[name](arg)
+        app.use use_middleware express[name](arg)
+      else
+        throw "Unknown middleware #{name}"
 
     for a in arguments
       switch typeof a
-        when 'function' then app.use a
+        when 'function' then app.use use_middleware a
         when 'string' then use a
         when 'object'
-          if a.stack? or a.route?
+          if a.stack? or a.route? or a.handle?
             app.use a
           else
             use k, v for k, v of a
@@ -414,29 +465,7 @@ vsfw.app = (func,options={}) ->
     r.middleware ?= []
 
     # Rewrite middleware
-    r.middleware = r.middleware.map (f) ->
-      (req,res,next) ->
-        ctx =
-          app: app
-          settings: app.settings
-          locals: res.locals
-          request: req
-          req: req
-          query: req.query
-          params: req.params
-          body: req.body
-          session: req.session
-          response: res
-          res: res
-          next: next
-
-        apply_helpers ctx
-
-        if app.settings['databag']
-          ctx.data = {}
-          copy_data_to ctx.data, [req.query, req.params, req.body]
-
-        f.call ctx, req, res, next
+    r.middleware = r.middleware.map wrap_middleware
 
     if typeof r.handler is 'string'
       app[r.verb] r.path, r.middleware, (req, res) ->
@@ -494,7 +523,7 @@ vsfw.app = (func,options={}) ->
             opts = {}
 
           if app.settings['databag']
-            opts.params = data
+            opts.params = ctx.data
 
           if not opts.postrender?
             postrender = report
@@ -698,20 +727,20 @@ vsfw.run = ->
             when 'disable_io' then options.disable_io = v
             when 'https' then options.https = v
 
-  vsapp = vsfw.app(root_function,options)
-  app = vsapp.app
+  zapp = vsfw.app(root_function,options)
+  app = zapp.app
 
   express_ready = ->
     log 'Express server listening on port %d in %s mode',
-      vsapp.server.address()?.port, app.settings.env
-    log "vSoft Framework #{vsfw.version} \"#{codename}\" orchestrating the show"
+      zapp.server.address()?.port, app.settings.env
+    log "vsfw #{vsfw.version} \"#{codename}\" orchestrating the show"
 
   if host
-    vsapp.server.listen port, host, express_ready
+    zapp.server.listen port, host, express_ready
   else
-    vsapp.server.listen port, express_ready
+    zapp.server.listen port, express_ready
 
-  vsapp
+  zapp
 
 # Creates a vsfw view adapter for templating engine `engine`. This adapter
 # can be used with `context.engine` or `context.use partials:`
@@ -760,14 +789,11 @@ vsfw.adapter = (engine, options = {}) ->
   renderFile.render = render
   renderFile
 
-
 coffeecup_adapter = vsfw.adapter 'coffeecup',
   blacklist: ['format', 'autoescape', 'locals', 'hardcode', 'cache']
-
 
 module.exports = vsfw.run
 module.exports.run = vsfw.run
 module.exports.app = vsfw.app
 module.exports.adapter = vsfw.adapter
 module.exports.version = vsfw.version
-module.exports.vsfw_fs = vsfw_fs
