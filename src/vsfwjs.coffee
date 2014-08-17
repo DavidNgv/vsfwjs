@@ -3,7 +3,7 @@
 # integrating [express](http://expressjs.com), [socket.io](http://socket.io)
 # and other best-of-breed libraries.
 
-vsfw = version: '0.0.5'
+vsfw = version: '0.0.6'
 
 codename = 'You can\'t do that on stage anymore'
 
@@ -249,10 +249,10 @@ vsfw.app = (func,options={}) ->
   context.view = (obj) ->
     for k, v of obj
       ext = path.extname k
-      zappa_fs[k] = v
+      vsfw_fs[k] = v
       if not ext
         ext = '.' + app.get 'view engine'
-        zappa_fs[k+ext] = v
+        vsfw_fs[k+ext] = v
     return
 
   context.engine = (obj) ->
