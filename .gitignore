@@ -1,0 +1,8 @@
+.DS_Store
+material/
+node_modules/
+benchmarks/out/*.dat
+benchmarks/out/*.out
+tests/*.js
+_site
+examples/public/bin
